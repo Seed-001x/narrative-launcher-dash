@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Narrative Launcher — Log-Only</title>
+<style>
+  body{background:#0b0e13;color:#dbe4f0;font:14px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding:18px}
+  h1{font-size:20px;margin:0} h1 em{font-style:normal;color:#f59e0b}
+  .sub{color:#8fa3bf;font-size:12px;margin:2px 0 14px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#34d399;margin-right:6px;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;margin-bottom:16px}
+  .card{background:#131926;border:1px solid #22304a;border-radius:12px;padding:12px}
+  .card b{display:block;font-size:20px} .card span{color:#8fa3bf;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .pos{color:#34d399}.neg{color:#f87171}
+  table{width:100%;border-collapse:collapse;background:#131926;border:1px solid #22304a;border-radius:12px;overflow:hidden}
+  td,th{padding:7px 10px;border-bottom:1px solid #1c2940;text-align:left;font-size:13px} th{color:#8fa3bf;font-weight:600}
+  h2{font-size:14px;margin:18px 0 8px;color:#aebfd8}
+  .pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#22304a;font-size:11px}
+  .pill.launch{background:#5b3a0d;color:#fcd34d} .pill.hot{background:#3b2f63;color:#c9bdff} .pill.grade{background:#14532d;color:#86efac}
+  a.coin{color:#c9bdff;text-decoration:none;font-weight:600} a.coin:hover{text-decoration:underline}
+  .cols{display:grid;grid-template-columns:1fr;gap:0} @media(min-width:900px){.cols{grid-template-columns:1fr 1fr;gap:18px}}
+</style>
+</head>
+<body>
+<h1>NARRATIVE <em>LAUNCHER</em> — LOG ONLY</h1>
+<div class="sub"><span class="dot"></span><span id="live">connecting…</span> · simulated launches only — no wallet, nothing is created, nothing is spent · J7 leg not wired yet (velocity leg only)</div>
+
+<div class="grid" id="cards"></div>
+
+<h2>Narratives heating now</h2>
+<table><thead><tr><th>Narrative</th><th>Coins</th><th>SOL in</th><th>Inflow 10m</th><th>Buyers*</th><th>Grads</th><th>Top coin</th><th>Top SOL / age</th><th>Status</th></tr></thead><tbody id="narr"></tbody></table>
+
+<div class="cols">
+  <div>
+    <h2>Would-launch log (with grades)</h2>
+    <table><thead><tr><th>Time</th><th>Narrative</th><th>Clones</th><th>SOL in</th><th>Top coin</th><th>+10m</th><th>+1h</th><th>+24h</th></tr></thead><tbody id="launches"></tbody></table>
+  </div>
+  <div>
+    <h2>Live feed</h2>
+    <table><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody id="feed"></tbody></table>
+  </div>
+</div>
+
+<div class="sub" style="margin-top:14px">*Buyers = summed DexScreener 1h buy transactions across the narrative's coins (proxy — the true unique-wallet tape isn't public). Grades: aggregate SOL multiple / graduations / top-coin move since the call. Data refreshes about every 90 seconds.</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const ago = (ts) => { const s = Math.max(0, Math.round((Date.now() - ts) / 1000)); return s < 60 ? s + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; };
+const tstr = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const coin = (symbol, mint) => mint ? '<a class="coin" href="https://pump.fun/coin/' + mint + '" target="_blank" rel="noopener">' + esc(symbol) + '</a>' : esc(symbol);
+const gradeCell = (g) => g ? 'agg ×' + (g.aggMultiple ?? '—') + ' · ' + (g.graduationsNow ?? 0) + ' grads' + (g.topGainPct != null ? ' · top ' + (g.topGainPct >= 0 ? '+' : '') + g.topGainPct + '%' : '') : '—';
+
+async function tick() {
+  try {
+    const r = await fetch('data.json?t=' + Date.now());
+    const d = await r.json();
+    const s = d.summary;
+    $('live').textContent = 'live · updated ' + ago(d.generatedAt);
+    const cards = [
+      [s.narrativesActive, 'narratives active'], [s.coinsTracked, 'coins tracked'],
+      [s.launchesTotal, 'would-launches'], [s.launchesLastHour, 'launches last hour'],
+      [s.graded, 'calls graded @10m'], [s.grewPct != null ? s.grewPct + '%' : '—', 'that kept growing'],
+    ];
+    $('cards').innerHTML = cards.map(c => '<div class="card"><b>' + c[0] + '</b><span>' + c[1] + '</span></div>').join('');
+    $('narr').innerHTML = d.narratives.length ? d.narratives.map(n => '<tr><td><b>' + esc(n.key) + '</b></td><td>' + n.coins + '</td><td>' + n.aggSol + '</td><td class="' + (n.inflow10 > 0 ? 'pos' : '') + '">' + (n.inflow10 > 0 ? '+' : '') + n.inflow10 + '</td><td>' + n.buyers + '</td><td>' + n.graduations + '</td><td>' + coin(n.topSymbol, n.topMint) + '</td><td>' + n.topSol + ' SOL / ' + n.topAgeMin + 'm</td><td>' + (n.saturated ? '<span class="pill">saturated</span>' : n.launched ? '<span class="pill launch">launched (sim)</span>' : '<span class="pill hot">watching</span>') + '</td></tr>').join('') : '<tr><td colspan="9">No active narratives this minute.</td></tr>';
+    $('launches').innerHTML = d.launches.length ? d.launches.map(l => '<tr><td>' + tstr(l.ts) + '</td><td><b>' + esc(l.key) + '</b></td><td>' + l.clonesAt + '</td><td>' + l.aggSolAt + '</td><td>' + coin(l.topSymbol, l.topMint) + '</td><td>' + gradeCell(l.grades[0]) + '</td><td>' + gradeCell(l.grades[1]) + '</td><td>' + gradeCell(l.grades[2]) + '</td></tr>').join('') : '<tr><td colspan="8">No simulated launches yet.</td></tr>';
+    $('feed').innerHTML = d.feed.length ? d.feed.map(e => {
+      let cls = 'pill', det = '';
+      if (e.ev === 'narrative') { det = 'narrative forming: <b>' + esc(e.key) + '</b> (' + e.coins + ' coins)'; }
+      if (e.ev === 'would_launch') { cls += ' launch'; det = '<b>WOULD LAUNCH</b> on <b>' + esc(e.key) + '</b> — ' + e.clonesAt + ' clones, ' + e.aggSolAt + ' SOL in, top ' + esc(e.topSymbol); }
+      if (e.ev === 'grade') { cls += ' grade'; det = 'graded <b>' + esc(e.key) + '</b> @' + e.atMin + 'm — agg ×' + (e.aggMultiple ?? '—') + ', ' + (e.graduationsNow ?? 0) + ' grads'; }
+      return '<tr><td>' + tstr(e.ts) + '</td><td><span class="' + cls + '">' + e.ev + '</span></td><td>' + det + '</td></tr>';
+    }).join('') : '<tr><td colspan="3">Feed is quiet.</td></tr>';
+  } catch { $('live').textContent = 'reconnecting…'; }
+}
+tick(); setInterval(tick, 30000);
+</script>
+</body>
+</html>
