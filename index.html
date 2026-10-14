@@ -25,12 +25,15 @@
 </head>
 <body>
 <h1>NARRATIVE <em>LAUNCHER</em> — LOG ONLY</h1>
-<div class="sub"><span class="dot"></span><span id="live">connecting…</span> · simulated launches only — no wallet, nothing is created, nothing is spent · J7 leg not wired yet (velocity leg only)</div>
+<div class="sub"><span class="dot"></span><span id="live">connecting…</span> · simulated launches only — no wallet, nothing is created, nothing is spent · J7 leg wired — a J7 post matching a narrative satisfies the confirmation leg (J7 or velocity)</div>
 
 <div class="grid" id="cards"></div>
 
 <h2>Narratives heating now</h2>
-<table><thead><tr><th>Narrative</th><th>Coins</th><th>SOL in</th><th>Inflow 10m</th><th>Buyers*</th><th>Grads</th><th>Top coin</th><th>Top SOL / age</th><th>Status</th></tr></thead><tbody id="narr"></tbody></table>
+<table><thead><tr><th>Narrative</th><th>Coins</th><th>SOL in</th><th>Inflow 10m</th><th>Buyers*</th><th>Grads</th><th>Top coin</th><th>Top SOL / age</th><th>J7</th><th>Status</th></tr></thead><tbody id="narr"></tbody></table>
+
+<h2>J7Tracker feed (collected from the logged-in app)</h2>
+<table><thead><tr><th>Time</th><th>Author</th><th>Post</th><th>Tags</th></tr></thead><tbody id="j7"></tbody></table>
 
 <div class="cols">
   <div>
@@ -65,12 +68,14 @@ async function tick() {
       [s.graded, 'calls graded @10m'], [s.grewPct != null ? s.grewPct + '%' : '—', 'that kept growing'],
     ];
     $('cards').innerHTML = cards.map(c => '<div class="card"><b>' + c[0] + '</b><span>' + c[1] + '</span></div>').join('');
-    $('narr').innerHTML = d.narratives.length ? d.narratives.map(n => '<tr><td><b>' + esc(n.key) + '</b></td><td>' + n.coins + '</td><td>' + n.aggSol + '</td><td class="' + (n.inflow10 > 0 ? 'pos' : '') + '">' + (n.inflow10 > 0 ? '+' : '') + n.inflow10 + '</td><td>' + n.buyers + '</td><td>' + n.graduations + '</td><td>' + coin(n.topSymbol, n.topMint) + '</td><td>' + n.topSol + ' SOL / ' + n.topAgeMin + 'm</td><td>' + (n.saturated ? '<span class="pill">saturated</span>' : n.launched ? '<span class="pill launch">launched (sim)</span>' : '<span class="pill hot">watching</span>') + '</td></tr>').join('') : '<tr><td colspan="9">No active narratives this minute.</td></tr>';
-    $('launches').innerHTML = d.launches.length ? d.launches.map(l => '<tr><td>' + tstr(l.ts) + '</td><td><b>' + esc(l.key) + '</b></td><td>' + l.clonesAt + '</td><td>' + l.aggSolAt + '</td><td>' + coin(l.topSymbol, l.topMint) + '</td><td>' + gradeCell(l.grades[0]) + '</td><td>' + gradeCell(l.grades[1]) + '</td><td>' + gradeCell(l.grades[2]) + '</td></tr>').join('') : '<tr><td colspan="8">No simulated launches yet.</td></tr>';
+    $('narr').innerHTML = d.narratives.length ? d.narratives.map(n => '<tr><td><b>' + esc(n.key) + '</b></td><td>' + n.coins + '</td><td>' + n.aggSol + '</td><td class="' + (n.inflow10 > 0 ? 'pos' : '') + '">' + (n.inflow10 > 0 ? '+' : '') + n.inflow10 + '</td><td>' + n.buyers + '</td><td>' + n.graduations + '</td><td>' + coin(n.topSymbol, n.topMint) + '</td><td>' + n.topSol + ' SOL / ' + n.topAgeMin + 'm</td><td>' + (n.j7Count ? '<span class="pill grade">' + n.j7Count + ' post' + (n.j7Count > 1 ? 's' : '') + '</span>' : '—') + '</td><td>' + (n.saturated ? '<span class="pill">saturated</span>' : n.launched ? '<span class="pill launch">launched (sim)</span>' : '<span class="pill hot">watching</span>') + '</td></tr>').join('') : '<tr><td colspan="10">No active narratives this minute.</td></tr>';
+    $('j7').innerHTML = (d.j7Posts || []).length ? d.j7Posts.map(p => '<tr><td>' + tstr(p.ts) + '</td><td><b>' + esc(p.author) + '</b></td><td>' + esc(p.text) + '</td><td>' + (p.cashtags || []).map(t => '$' + esc(t)).join(' ') + '</td></tr>').join('') : '<tr><td colspan="4">No J7 posts collected yet.</td></tr>';
+    $('launches').innerHTML = d.launches.length ? d.launches.map(l => '<tr><td>' + tstr(l.ts) + '</td><td><b>' + esc(l.key) + '</b>' + (l.j7 && l.j7.matched ? ' <span class="pill grade">J7</span>' : '') + (l.j7 && l.j7.via ? ' <span class="pill">' + esc(l.j7.via) + '</span>' : '') + '</td><td>' + l.clonesAt + '</td><td>' + l.aggSolAt + '</td><td>' + coin(l.topSymbol, l.topMint) + '</td><td>' + gradeCell(l.grades[0]) + '</td><td>' + gradeCell(l.grades[1]) + '</td><td>' + gradeCell(l.grades[2]) + '</td></tr>').join('') : '<tr><td colspan="8">No simulated launches yet.</td></tr>';
     $('feed').innerHTML = d.feed.length ? d.feed.map(e => {
       let cls = 'pill', det = '';
       if (e.ev === 'narrative') { det = 'narrative forming: <b>' + esc(e.key) + '</b> (' + e.coins + ' coins)'; }
       if (e.ev === 'would_launch') { cls += ' launch'; det = '<b>WOULD LAUNCH</b> on <b>' + esc(e.key) + '</b> — ' + e.clonesAt + ' clones, ' + e.aggSolAt + ' SOL in, top ' + esc(e.topSymbol); }
+      if (e.ev === 'j7_match') { cls += ' grade'; det = '<b>J7 MATCH</b> on <b>' + esc(e.key) + '</b> — ' + esc(e.author) + ': ' + esc(String(e.text || '').slice(0, 110)); }
       if (e.ev === 'grade') { cls += ' grade'; det = 'graded <b>' + esc(e.key) + '</b> @' + e.atMin + 'm — agg ×' + (e.aggMultiple ?? '—') + ', ' + (e.graduationsNow ?? 0) + ' grads'; }
       return '<tr><td>' + tstr(e.ts) + '</td><td><span class="' + cls + '">' + e.ev + '</span></td><td>' + det + '</td></tr>';
     }).join('') : '<tr><td colspan="3">Feed is quiet.</td></tr>';
